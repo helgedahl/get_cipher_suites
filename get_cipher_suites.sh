@@ -106,6 +106,9 @@ usage() {
     echo "Options:"
     echo "  -t    Target"
     echo "  -p    Port number"
+    echo "  -c    Client certificate file (PEM)"
+    echo "  -k    Client key file (PEM)"
+    echo "  -ca   CA file (PEM)"
     echo "  -n    Non-interactive"
     echo "  -v    Verbose"
     echo "  -h    Help"
@@ -271,6 +274,15 @@ function TestCipherSuitesAgainstTarget() {
         local verbose=1
     fi
     
+    # Setup openssl command based on input
+    openssl_command="echo \"\" | openssl s_client -connect \"$target\":\"$portnumber\""
+    if [ -n "${certificate:-}" ]; then
+        openssl_command="$openssl_command -cert $certificate -key $key"
+    fi
+    if [[ -n ${cafile:-} ]]; then
+        openssl_command="$openssl_command -cafile $cafile"
+    fi
+
     counter=1
     # Loop through each version of the SSL/TLS protocol.
     for v in "${arrTlsVers[@]}"; do
@@ -278,7 +290,8 @@ function TestCipherSuitesAgainstTarget() {
         for c in $(openssl ciphers 'ALL:eNULL' | tr ':' ' '); do
                                                 
             if [ "$verbose" -eq 1 ]; then
-                printf "[%(%Y-%m-%d %H:%M:%S)T] Protocol: $v, Cipher Suite (OpenSSL Nomenclature): $c\n"
+                #printf "[%(%Y-%m-%d %H:%M:%S)T] Protocol: $v, Cipher Suite (OpenSSL Nomenclature): $c\n"
+                printf "Protocol: $v, Cipher Suite (OpenSSL Nomenclature): $c\n"
             else
                 printf "."
             fi
@@ -287,23 +300,25 @@ function TestCipherSuitesAgainstTarget() {
             # the specified target, if it is then print a row to the table.
             
             if [ "$verbose" -eq 1 ]; then
-                printf "[%(%Y-%m-%d %H:%M:%S)T]  * Testing target for cipher suite...\n"
+                #printf "[%(%Y-%m-%d %H:%M:%S)T]  * Testing target for cipher suite...\n"
+                printf "* Testing target for cipher suite...\n"
             fi  
-            
+
             # Temporarily disable exit checking to prevent the script from
             # aborting. This is because if openssl fails to connect to the 
             # target using the specified cipher suite it will produce a non-zero 
             # exit code.
             set +e
-            tmpoutput=$(openssl s_client -connect "$target":"$portnumber" \
-            -cipher "$c" -"$v" < /dev/null 2>&1 >/dev/null)
+            tmpoutput=$(eval "$openssl_command -cipher \"$c\" -\"$v\" 2>&1 >/dev/null")
             opensslexitcode="$?"
             set -e
             
             if [ "$opensslexitcode" -eq 0 ]; then
                 if [ "$verbose" -eq 1 ]; then
-                    printf "[%(%Y-%m-%d %H:%M:%S)T]    Enabled: TRUE\n"
-                    printf "[%(%Y-%m-%d %H:%M:%S)T]  * Converting OpenSSL name to IANA description...\n"
+                    #printf "[%(%Y-%m-%d %H:%M:%S)T]    Enabled: TRUE\n"
+                    printf "Enabled: TRUE\n"
+                    #printf "[%(%Y-%m-%d %H:%M:%S)T]  * Converting OpenSSL name to IANA description...\n"
+                    printf "* Converting OpenSSL name to IANA description...\n"
                 fi
                 
                 # Temporarily disable exit checking to prevent the script from
@@ -326,11 +341,12 @@ function TestCipherSuitesAgainstTarget() {
                 
                 if [ "$ctranslatedexitcode" -eq 0 ]; then
                     if [ "$verbose" -eq 1 ]; then
-                        printf "[%(%Y-%m-%d %H:%M:%S)T]     $ctranslated\n"
+                        #printf "[%(%Y-%m-%d %H:%M:%S)T]     $ctranslated\n"
+                        printf "$ctranslated\n"
                     fi
                 else
                     if [ "$verbose" -eq 1 ]; then
-                        printf "[%(%Y-%m-%d %H:%M:%S)T]"
+                        #printf "[%(%Y-%m-%d %H:%M:%S)T]"
                         printf "%-3s %s \n %-23s %s \n" "" "Converting OpenSSL cipher suite name failed." "" "$ctranslated"
                     else
                         printf "\n%s\n%s\n" "Converting OpenSSL cipher suite name '$c' failed." "$ctranslated"
@@ -344,7 +360,8 @@ function TestCipherSuitesAgainstTarget() {
                 ((counter++))
             else
                 if [ "$verbose" -eq 1 ]; then
-                    printf "[%(%Y-%m-%d %H:%M:%S)T]    Enabled: FALSE\n"
+                    #printf "[%(%Y-%m-%d %H:%M:%S)T]    Enabled: FALSE\n"
+                    printf "Enabled: FALSE\n"
                     printf "                         $tmpoutput\n"
                 fi
             fi
@@ -431,7 +448,7 @@ main() {
     local target=''
     local tableoutput=''
 
-    while getopts "t: p: n v h a ?" OPTION
+    while getopts "t: p: c: k: ca: n v h a ?" OPTION
     do
         case "$OPTION" in
             t)
@@ -439,6 +456,15 @@ main() {
                 ;;
             p)
                 portnumber="$OPTARG"
+                ;;
+            c)
+                certificate="$OPTARG"
+                ;;
+            k)
+                key="$OPTARG"
+                ;;
+            ca)
+                cafile="$OPTARG"
                 ;;
             v)
                 verbose=1
