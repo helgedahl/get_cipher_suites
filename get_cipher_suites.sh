@@ -247,7 +247,7 @@ function TestCipherSuitesAgainstTarget() {
     #        Optional.
     
     local intNumberArgs=5
-    local columnWidths="%-3s | %-8s | %-29s | %-20s\n"
+    local columnWidths="%-3s | %-8s | %-29s | %-45s | %-20s\n"
     local verbose=0
     local opensslexitcode=''
     local ctranslatedexitcode=''
@@ -274,6 +274,8 @@ function TestCipherSuitesAgainstTarget() {
         local verbose=1
     fi
     
+    curl -s --location https://ciphersuite.info/api/cs > ciphersuites.info.json
+
     # Setup openssl command based on input
     openssl_command="echo \"\" | openssl s_client -connect \"$target\":\"$portnumber\""
     if [ -n "${certificate:-}" ]; then
@@ -355,7 +357,14 @@ function TestCipherSuitesAgainstTarget() {
                     exit 1
                 fi
                 
-                tableoutput+=$(printf "$columnWidths" "$counter" "$v" "$c" "$ctranslated")
+                set +e
+                security_level=$(jq ".ciphersuites[] | select(.$ctranslated) | .$ctranslated.security" ciphersuites.info.json 2>/dev/null | tr -d \")
+                if [ -z "$security_level" ]; then
+                    security_level="unknown"
+                fi
+                set -e
+
+                tableoutput+=$(printf "$columnWidths" "$counter" "$v" "$c" "$ctranslated" "$security_level")
                 tableoutput+="\n"
                 ((counter++))
             else
@@ -371,7 +380,7 @@ function TestCipherSuitesAgainstTarget() {
     
     if [ ! -z "$tableoutput" ]; then
         printf "\n\n"
-        printf "$columnWidths" "" "Protocol" "OpenSSL Name" "IANA Description"
+        printf "$columnWidths" "" "Protocol" "OpenSSL Name" "IANA Description" "Security Level"
         printf "$tableoutput\n"
     else
         printf "\n\n"
